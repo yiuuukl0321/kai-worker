@@ -10,4 +10,4 @@ RUN pip install --no-cache-dir playwright requests \
 WORKDIR /app
 COPY worker.py .
 
-CMD ["bash", "-c", "Xvfb :99 -screen 0 1280x800x24 & x11vnc -display :99 -forever -shared -nopw -quiet & websockify --web=/usr/share/novnc ${PORT:-8080} localhost:5900 & DISPLAY=:99 python worker.py"]<br/>
+CMD ["bash", "-c", "Xvfb :99 -screen 0 1280x800x24 & x11vnc -display :99 -forever -shared -nopw -quiet & websockify --web=/usr/share/novnc ${PORT:-8080} localhost:5900 & DISPLAY=:99 python worker.py"]
