@@ -1,53 +1,92 @@
-import os, time, json, requests
+import os, json, time, traceback, requests
 from playwright.sync_api import sync_playwright
 
-URL = os.environ["SUPA_URL"].rstrip("/") + "/rest/v1/browser_jobs"
-KEY = os.environ["SUPA_KEY"]
-H = {"apikey": KEY, "Authorization": "Bearer " + KEY, "Content-Type": "application/json"}
+SUPA_URL = os.environ["SUPA_URL"].rstrip("/")
+SUPA_KEY = os.environ["SUPA_KEY"]
+HEAD = {
+    "apikey": SUPA_KEY,
+    "Authorization": "Bearer " + SUPA_KEY,
+    "Content-Type": "application/json",
+}
 
-def take():
-    r = requests.get(URL, headers=H, params={"status": "eq.pending", "order": "id.asc", "limit": 1})
-    d = r.json()
-    return d[0] if d else None
+CHROME_ARGS = [
+    "--no-sandbox",
+    "--disable-dev-shm-usage",
+    "--disable-gpu",
+    "--disable-software-rasterizer",
+    "--renderer-process-limit=1",
+    "--js-flags=--max-old-space-size=256",
+    "--autoplay-policy=user-gesture-required",
+    "--mute-audio",
+    "--window-size=960,540",
+]
 
-def done(jid, res):
-    requests.patch(URL, headers=H, params={"id": "eq." + str(jid)}, json={"status": "done", "result": str(res)[:6000]})
+def fetch_job():
+    r = requests.get(SUPA_URL + "/rest/v1/browser_jobs", headers=HEAD,
+        params={"status": "eq.pending", "order": "id.asc", "limit": "1"}, timeout=30)
+    rows = r.json()
+    return rows[0] if rows else None
 
-def load_state():
-    r = requests.get(URL, headers=H, params={"status": "eq.state", "order": "id.desc", "limit": 1})
-    d = r.json()
-    return json.loads(d[0]["cmd"]) if d else None
+def write_back(job_id, data):
+    requests.patch(SUPA_URL + "/rest/v1/browser_jobs", headers=HEAD,
+        params={"id": "eq." + str(job_id)}, json=data, timeout=30)
 
-with sync_playwright() as p:
-    b = p.chromium.launch(headless=False, args=["--no-sandbox", "--disable-dev-shm-usage", "--disable-gpu", "--disable-software-rasterizer", "--disable-extensions", "--renderer-process-limit=1", "--js-flags=--max-old-space-size=256"])
-    ctx = b.new_context(viewport={"width": 1280, "height": 800})
-    pg = ctx.new_page()
-    st = load_state()
-    if st:
-        ctx.add_cookies(st["cookies"])
-        for o in st.get("origins", []):
+def fetch_state():
+    r = requests.get(SUPA_URL + "/rest/v1/browser_jobs", headers=HEAD,
+        params={"status": "eq.state", "order": "id.desc", "limit": "1"}, timeout=30)
+    rows = r.json()
+    return rows[0]["cmd"] if rows else None
+
+def restore_state(ctx, state_json):
+    st = json.loads(state_json)
+    try:
+        ctx.add_cookies(st.get("cookies", []))
+    except Exception as e:
+        print("cookies failed:", e)
+    for origin in st.get("origins", []):
+        try:
+            page = ctx.new_page()
+            page.goto(origin["origin"], timeout=60000)
+            for kv in origin.get("localStorage", []):
+                page.evaluate("([k, v]) => localStorage.setItem(k, v)",
+                              [kv["name"], kv["value"]])
+            page.close()
+        except Exception as e:
+            print("origin failed:", origin.get("origin"), e)
+
+def main():
+    state_json = fetch_state()
+    with sync_playwright() as p:
+        browser = p.chromium.launch(headless=False, args=CHROME_ARGS)
+        ctx = browser.new_context(viewport={"width": 960, "height": 540})
+        if state_json:
+            restore_state(ctx, state_json)
+
+        pg = ctx.new_page()
+        pg.set_default_timeout(30000)
+
+        while True:
             try:
-                pg.goto(o["origin"])
-                for kv in o.get("localStorage", []):
-                    pg.evaluate("([k,v]) => localStorage.setItem(k,v)", [kv["name"], kv["value"]])
-            except Exception as e:
-                print("origin 跳过", o.get("origin"), e, flush=True)
-        print("登录态已加载", flush=True)
-    print("cloud worker 已启动", flush=True)
-    while True:
-        j = take()
-        if j:
-            g = {"pg": pg, "ctx": ctx, "b": b}
-            try:
+                if pg.is_closed():
+                    print("page crashed, reopening")
+                    pg = ctx.new_page()
+                    pg.set_default_timeout(30000)
+
+                job = fetch_job()
+                if not job:
+                    time.sleep(2)
+                    continue
+
                 try:
-                    res = eval(j["cmd"], g)
-                except SyntaxError:
-                    exec(j["cmd"], g)
-                    res = g.get("R", "ok")
-                if res is None:
-                    res = "ok"
+                    exec(job["cmd"], {"pg": pg, "ctx": ctx, "browser": browser})
+                    write_back(job["id"], {"status": "done", "result": "ok"})
+                except Exception:
+                    write_back(job["id"], {"status": "done",
+                                           "result": traceback.format_exc()})
+
             except Exception as e:
-                res = "错误: " + str(e)
-            done(j["id"], res)
-            print("完成:", j["id"], str(res)[:200], flush=True)
-        time.sleep(4)
+                print("loop error:", e)
+                time.sleep(5)
+
+if __name__ == "__main__":
+    main()
