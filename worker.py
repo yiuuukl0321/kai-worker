@@ -19,8 +19,8 @@ def load_state():
     return json.loads(d[0]["cmd"]) if d else None
 
 with sync_playwright() as p:
-    b = p.chromium.launch(headless=True, args=["--no-sandbox"])
-    ctx = b.new_context()
+    b = p.chromium.launch(headless=False, args=["--no-sandbox", "--disable-dev-shm-usage"])
+    ctx = b.new_context(viewport={"width": 1280, "height": 800})
     pg = ctx.new_page()
     st = load_state()
     if st:
