@@ -17,7 +17,6 @@ jobs:
       SUPA_URL: https://saxgvdcoxuawaslqebmd.supabase.co
       SUPA_KEY: sb_publishable_120kFKhxe_NMVrcRdN0lwg_DDckWKMk
       ONESHOT: "1"
-      HEADLESS: "1"
     steps:
       - uses: actions/checkout@v4
 
@@ -32,8 +31,10 @@ jobs:
 
       - name: Install
         run: |
+          sudo apt-get update
+          sudo apt-get install -y xvfb
           pip install --quiet playwright requests
           python -m playwright install --with-deps chromium
 
       - name: Run
-        run: python worker.py
+        run: xvfb-run -a python worker.py
