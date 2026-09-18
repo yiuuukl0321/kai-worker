@@ -9,6 +9,9 @@ HEAD = {
     "Content-Type": "application/json",
 }
 
+ONESHOT = os.environ.get("ONESHOT", "") == "1"
+HEADLESS = ONESHOT or os.environ.get("HEADLESS", "") == "1"
+
 CHROME_ARGS = [
     "--no-sandbox",
     "--disable-dev-shm-usage",
@@ -57,7 +60,7 @@ def restore_state(ctx, state_json):
 def main():
     state_json = fetch_state()
     with sync_playwright() as p:
-        browser = p.chromium.launch(headless=False, args=CHROME_ARGS)
+        browser = p.chromium.launch(headless=HEADLESS, args=CHROME_ARGS)
         ctx = browser.new_context(viewport={"width": 960, "height": 540})
         if state_json:
             restore_state(ctx, state_json)
@@ -74,6 +77,9 @@ def main():
 
                 job = fetch_job()
                 if not job:
+                    if ONESHOT:
+                        print("no pending job")
+                        break
                     time.sleep(2)
                     continue
 
@@ -84,9 +90,16 @@ def main():
                     write_back(job["id"], {"status": "done",
                                            "result": traceback.format_exc()})
 
+                if ONESHOT:
+                    break
+
             except Exception as e:
                 print("loop error:", e)
+                if ONESHOT:
+                    break
                 time.sleep(5)
+
+        browser.close()
 
 if __name__ == "__main__":
     main()
