@@ -10,7 +10,7 @@ HEAD = {
 }
 
 ONESHOT = os.environ.get("ONESHOT", "") == "1"
-HEADLESS = ONESHOT or os.environ.get("HEADLESS", "") == "1"
+HEADLESS = os.environ.get("HEADLESS", "") == "1"
 
 CHROME_ARGS = [
     "--no-sandbox",
@@ -21,6 +21,7 @@ CHROME_ARGS = [
     "--js-flags=--max-old-space-size=256",
     "--autoplay-policy=user-gesture-required",
     "--mute-audio",
+    "--disable-blink-features=AutomationControlled",
     "--window-size=960,540",
 ]
 
