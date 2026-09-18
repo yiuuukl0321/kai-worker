@@ -1,8 +1,8 @@
 import os, json, time, traceback, requests
 from playwright.sync_api import sync_playwright
 
-SUPA_URL = os.environ["SUPA_URL"].rstrip("/")
-SUPA_KEY = os.environ["SUPA_KEY"]
+SUPA_URL = os.environ.get("SUPA_URL", "https://saxgvdcoxuawaslqebmd.supabase.co").rstrip("/")
+SUPA_KEY = os.environ.get("SUPA_KEY", "sb_publishable_120kFKhxe_NMVrcRdN0lwg_DDckWKMk")
 HEAD = {
     "apikey": SUPA_KEY,
     "Authorization": "Bearer " + SUPA_KEY,
@@ -15,12 +15,6 @@ HEADLESS = os.environ.get("HEADLESS", "") == "1"
 CHROME_ARGS = [
     "--no-sandbox",
     "--disable-dev-shm-usage",
-    "--disable-gpu",
-    "--disable-software-rasterizer",
-    "--renderer-process-limit=1",
-    "--js-flags=--max-old-space-size=256",
-    "--autoplay-policy=user-gesture-required",
-    "--mute-audio",
     "--disable-blink-features=AutomationControlled",
     "--window-size=960,540",
 ]
@@ -68,11 +62,11 @@ def main():
 
         pg = ctx.new_page()
         pg.set_default_timeout(30000)
+        print("worker ready")
 
         while True:
             try:
                 if pg.is_closed():
-                    print("page crashed, reopening")
                     pg = ctx.new_page()
                     pg.set_default_timeout(30000)
 
