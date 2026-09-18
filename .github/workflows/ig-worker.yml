@@ -1,0 +1,39 @@
+name: kai-worker
+
+on:
+  schedule:
+    - cron: "*/5 * * * *"
+  workflow_dispatch:
+
+concurrency:
+  group: kai-worker
+  cancel-in-progress: false
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    env:
+      SUPA_URL: https://saxgvdcoxuawaslqebmd.supabase.co
+      SUPA_KEY: sb_publishable_120kFKhxe_NMVrcRdN0lwg_DDckWKMk
+      ONESHOT: "1"
+      HEADLESS: "1"
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: pw-chromium-${{ runner.os }}
+
+      - name: Install
+        run: |
+          pip install --quiet playwright requests
+          python -m playwright install --with-deps chromium
+
+      - name: Run
+        run: python worker.py
